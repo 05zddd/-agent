@@ -1,0 +1,39 @@
+# LangChain + RAG
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.3.0
+
+# DashScope (Tongyi LLM + Embedding)
+dashscope>=1.20.0
+
+# FastAPI
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.18
+
+# Pydantic
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# HTTP
+httpx>=0.28.0
+
+# Vector DB
+chromadb>=0.5.0
+
+# Cache
+redis>=5.2.0
+
+# Document parsing
+PyMuPDF>=1.24.0
+python-docx>=1.1.0
+pytesseract>=0.3.10
+Pillow>=11.0.0
+
+# Database
+sqlalchemy>=2.0.0
+aiosqlite>=0.20.0
+
+# Utilities
+python-dotenv>=1.0.0
+aiofiles>=24.0.0
