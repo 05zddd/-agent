@@ -34,6 +34,7 @@ def build_agent(session_id: str = "default"):
         model=settings.llm_model,
         dashscope_api_key=settings.dashscope_api_key,
         temperature=0.7,
+        streaming=True,
     )
 
     tools = [

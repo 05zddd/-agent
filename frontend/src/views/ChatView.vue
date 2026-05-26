@@ -37,11 +37,7 @@
         </div>
         <div v-for="(msg, idx) in messages" :key="idx" :class="['message', msg.role]">
           <div class="message-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
-          <div class="message-bubble" v-html="renderMarkdown(msg.content)"></div>
-        </div>
-        <div v-if="loading" class="message assistant">
-          <div class="message-avatar">🤖</div>
-          <div class="message-bubble typing">思考中...</div>
+          <div class="message-bubble" v-html="msg.content || '<span class=\'typing\'>思考中...</span>'"></div>
         </div>
       </div>
 
@@ -126,13 +122,6 @@ async function send() {
           messages.value[lastIdx].content += event.content
           await nextTick()
           scrollBottom()
-          break
-        case 'tool_start':
-          messages.value[lastIdx].content += `\n\n> 🔧 正在调用 ${event.tool}...\n\n`
-          await nextTick()
-          scrollBottom()
-          break
-        case 'tool_end':
           break
         case 'done':
           if (event.session_id && isNewSession) {
