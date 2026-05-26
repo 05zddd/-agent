@@ -1,10 +1,12 @@
 import sys
 import os
+import json
 import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from langchain_core.messages import HumanMessage
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -77,38 +79,42 @@ async def chat(req: ChatRequest):
     # Save user message
     save_chat_message(session_id, "user", req.message)
 
-    # Check cache
+    # Check cache — return cached reply directly (no need to stream)
     cached = await cache.get("chat", f"{session_id}:{req.message}")
     if cached:
         return {"reply": cached, "session_id": session_id}
 
-    try:
-        from langchain_core.messages import HumanMessage
-        agent = get_or_create_agent(session_id)
-        config = {"configurable": {"thread_id": session_id}}
-        result = agent.invoke(
-            {"messages": [HumanMessage(content=req.message)]},
-            config=config,
-        )
-        # Extract last AI message from result
-        messages = result.get("messages", [])
-        reply = ""
-        for m in reversed(messages):
-            if hasattr(m, "content") and m.__class__.__name__ == "AIMessage":
-                reply = m.content
-                break
-        if not reply:
-            reply = str(messages[-1].content) if messages else str(result)
-    except Exception as e:
-        reply = f"处理请求时出错: {str(e)}"
+    agent = get_or_create_agent(session_id)
+    config = {"configurable": {"thread_id": session_id}}
 
-    # Save assistant message
-    save_chat_message(session_id, "assistant", reply)
+    async def event_stream():
+        full_reply = ""
+        try:
+            async for event in agent.astream_events(
+                {"messages": [HumanMessage(content=req.message)]},
+                config=config,
+                version="v2",
+            ):
+                kind = event["event"]
+                if kind == "on_tool_start":
+                    tool_name = event["name"]
+                    yield f"data: {json.dumps({'type': 'tool_start', 'tool': tool_name})}\n\n"
+                elif kind == "on_tool_end":
+                    yield f"data: {json.dumps({'type': 'tool_end', 'tool': event['name']})}\n\n"
+                elif kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and chunk.content:
+                        full_reply += chunk.content
+                        yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+        finally:
+            if full_reply:
+                save_chat_message(session_id, "assistant", full_reply)
+                await cache.set("chat", f"{session_id}:{req.message}", full_reply)
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
 
-    # Cache
-    await cache.set("chat", f"{session_id}:{req.message}", reply)
-
-    return {"reply": reply, "session_id": session_id}
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # --- Document Upload ---

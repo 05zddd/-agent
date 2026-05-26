@@ -63,7 +63,7 @@
 
 <script setup>
 import { ref, nextTick, onMounted } from 'vue'
-import { sendMessage, getHistory, getSessions } from '../api/index.js'
+import { streamMessage, getHistory, getSessions } from '../api/index.js'
 import MarkdownIt from 'markdown-it'
 
 const md = new MarkdownIt({ breaks: true, linkify: true })
@@ -116,17 +116,39 @@ async function send() {
   loading.value = true
 
   try {
-    const res = await sendMessage(msg, sessionId.value)
-    const returnedId = res.data.session_id || sessionId.value
-    if (sessionId.value !== returnedId) {
-      sessionId.value = returnedId
+    const isNewSession = sessionId.value === 'default'
+    messages.value.push({ role: 'assistant', content: '' })
+    const lastIdx = messages.value.length - 1
+
+    for await (const event of streamMessage(msg, sessionId.value)) {
+      switch (event.type) {
+        case 'token':
+          messages.value[lastIdx].content += event.content
+          await nextTick()
+          scrollBottom()
+          break
+        case 'tool_start':
+          messages.value[lastIdx].content += `\n\n> 🔧 正在调用 ${event.tool}...\n\n`
+          await nextTick()
+          scrollBottom()
+          break
+        case 'tool_end':
+          break
+        case 'done':
+          if (event.session_id && isNewSession) {
+            sessionId.value = event.session_id
+          }
+          refreshSessions()
+          break
+        case 'error':
+          messages.value[lastIdx].content += `\n\n出错了：${event.content}`
+          break
+      }
     }
-    messages.value.push({ role: 'assistant', content: res.data.reply })
-    refreshSessions()
   } catch (e) {
     messages.value.push({
       role: 'assistant',
-      content: '出错了：' + (e.response?.data?.detail || e.message),
+      content: '出错了：' + (e.message || '请求失败'),
     })
   } finally {
     loading.value = false
