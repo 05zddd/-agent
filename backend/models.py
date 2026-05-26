@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # --- Request models ---
@@ -60,7 +60,7 @@ class DocumentInfo(BaseModel):
     file_type: str
     size_bytes: int
     chunks_count: int
-    uploaded_at: datetime
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class DocumentUploadResponse(BaseModel):

@@ -58,7 +58,7 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { uploadDocument, queryRAG } from '../api/index.js'
+import { uploadDocument, streamMessage } from '../api/index.js'
 
 const maxSize = 20
 const fileInput = ref(null)
@@ -98,17 +98,23 @@ async function askQuestion() {
   if (!question.value.trim() || asking.value) return
   const q = question.value.trim()
   asking.value = true
+  question.value = ''
+
+  const entry = { question: q, answer: '' }
+  qaList.push(entry)
+
   try {
-    const res = await queryRAG(q)
-    const results = res.data.results || []
-    let answer = '未找到相关文档内容，请确认已上传文档。'
-    if (results.length > 0) {
-      answer = results.map((r, i) => `[片段${i+1}] ${r.text}`).join('\n\n')
+    const msg = `根据我上传的文档：${q}`
+    for await (const event of streamMessage(msg)) {
+      if (event.type === 'token') {
+        entry.answer += event.content
+      }
     }
-    qaList.push({ question: q, answer })
-    question.value = ''
+    if (!entry.answer) {
+      entry.answer = '未找到相关文档内容，请确认已上传文档。'
+    }
   } catch (e) {
-    qaList.push({ question: q, answer: '查询失败: ' + (e.response?.data?.detail || e.message) })
+    entry.answer = '查询失败: ' + (e.message || '请求失败')
   } finally {
     asking.value = false
   }
